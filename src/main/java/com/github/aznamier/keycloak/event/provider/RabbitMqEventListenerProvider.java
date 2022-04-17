@@ -29,7 +29,7 @@ public class RabbitMqEventListenerProvider implements EventListenerProvider {
 
 	public RabbitMqEventListenerProvider(RabbitMqConfig cfg, KeycloakSession session) {
 		this.cfg = cfg;
-		
+
 		this.factory = new ConnectionFactory();
 
 		this.factory.setUsername(cfg.getUsername());
@@ -47,7 +47,7 @@ public class RabbitMqEventListenerProvider implements EventListenerProvider {
 		}
 
 		session.getTransactionManager().enlistAfterCompletion(tx);
-		
+
 	}
 
 	@Override
@@ -64,29 +64,30 @@ public class RabbitMqEventListenerProvider implements EventListenerProvider {
 	public void onEvent(AdminEvent adminEvent, boolean includeRepresentation) {
 		tx.addAdminEvent(adminEvent, includeRepresentation);
 	}
-	
+
 	private void publishEvent(Event event) {
 		EventClientNotificationMqMsg msg = EventClientNotificationMqMsg.create(event);
 		String routingKey = RabbitMqConfig.calculateRoutingKey(event);
+		msg.setPattern(routingKey);
 		String messageString = RabbitMqConfig.writeAsJson(msg, true);
-		
 		BasicProperties msgProps = RabbitMqEventListenerProvider.getMessageProps(EventClientNotificationMqMsg.class.getName());
 		this.publishNotification(messageString, msgProps, routingKey);
 	}
-	
+
 	private void publishAdminEvent(AdminEvent adminEvent, boolean includeRepresentation) {
 		EventAdminNotificationMqMsg msg = EventAdminNotificationMqMsg.create(adminEvent);
 		String routingKey = RabbitMqConfig.calculateRoutingKey(adminEvent);
+		msg.setPattern(routingKey);
 		String messageString = RabbitMqConfig.writeAsJson(msg, true);
 		BasicProperties msgProps = RabbitMqEventListenerProvider.getMessageProps(EventAdminNotificationMqMsg.class.getName());
 		this.publishNotification(messageString,msgProps, routingKey);
 	}
-	
+
 	private static BasicProperties getMessageProps(String className) {
-		
+
 		Map<String,Object> headers = new HashMap<>();
 		headers.put("__TypeId__", className);
-		
+
 		Builder propsBuilder = new AMQP.BasicProperties.Builder()
 				.appId("Keycloak")
 				.headers(headers)
@@ -94,16 +95,16 @@ public class RabbitMqEventListenerProvider implements EventListenerProvider {
 				.contentEncoding("UTF-8");
 		return propsBuilder.build();
 	}
-	
+
 
 	private void publishNotification(String messageString, BasicProperties props, String routingKey) {
 
-		
+
 
 		try {
 			Connection conn = factory.newConnection();
 			Channel channel = conn.createChannel();
-			
+
 			channel.basicPublish(cfg.getExchange(), routingKey, props, messageString.getBytes(StandardCharsets.UTF_8));
 			log.infof("keycloak-to-rabbitmq SUCCESS sending message: %s%n", routingKey);
 			channel.close();
